@@ -1,6 +1,12 @@
 import discord
-from discord.ext import commands
-from datetime import datetime
+import os
+from datetime import datetime, timedelta
+
+intents = discord.Intents.default()
+intents.voice_states = True
+intents.message_content = True
+
+client = discord.Client(intents=intents)
 
 # ====== サーバー設定 ======
 SERVER_SETTINGS = {
@@ -12,27 +18,21 @@ SERVER_SETTINGS = {
 }
 # =========================
 
-intents = discord.Intents.default()
-intents.voice_states = True
-intents.guilds = True
-
-bot = commands.Bot(command_prefix="!", intents=intents)
-
-@bot.event
+@client.event
 async def on_ready():
-    print(f"ログイン成功: {bot.user}")
+    print(f"ログインしたよ: {client.user}")
 
-@bot.event
+@client.event
 async def on_voice_state_update(member, before, after):
-
-    print("イベントきた", member.name)
-    print("before:", before.channel)
-    print("after:", after.channel)
 
     # 入室したときだけ
     if before.channel is None and after.channel is not None:
 
         channel = after.channel
+
+        # 🔇 フリールーム（OParty Beastなど）を無視
+        if channel.name.startswith("free"):
+            return
 
         # 人間だけカウント
         members = [m for m in channel.members if not m.bot]
@@ -40,7 +40,8 @@ async def on_voice_state_update(member, before, after):
         # 最初の1人だけ
         if len(members) == 1:
 
-            hour = datetime.now().hour
+            # 🇯🇵 日本時間
+            hour = (datetime.utcnow() + timedelta(hours=9)).hour
             is_late_night = 0 <= hour < 6
 
             guild_id = member.guild.id
@@ -50,40 +51,27 @@ async def on_voice_state_update(member, before, after):
 
             config = SERVER_SETTINGS[guild_id]
 
-            role_id = config["late_role"] if is_late_night else config["normal_role"]
-            text_channel = bot.get_channel(config["channel"])
+            # ロール取得
+            normal_role = member.guild.get_role(config["normal_role"])
+            late_role = member.guild.get_role(config["late_role"])
 
-            if text_channel:
+            # チャンネル取得
+            notify_channel = client.get_channel(config["channel"])
 
-                # 🎀 色（深夜はちょっと落ち着かせる）
+            # ロール付与
+            if is_late_night:
+                if late_role:
+                    await member.add_roles(late_role)
+            else:
+                if normal_role:
+                    await member.add_roles(normal_role)
+
+            # 通知
+            if notify_channel:
                 if is_late_night:
-                    color = discord.Color.from_rgb(180, 150, 200)  # 落ち着き紫
-                    footer_text = "よふかししすぎないでね 🐾"
+                    await notify_channel.send(f"🌙 {member.mention} が深夜にVC参加！")
                 else:
-                    color = discord.Color.from_rgb(255, 182, 193)  # ピンク
-                    footer_text = "あそびにおいで〜 🐾"
+                    await notify_channel.send(f"☀️ {member.mention} がVC参加！")
 
-                embed = discord.Embed(
-                    title="🐾 だれか来たよ〜",
-                    description=f"✨ {member.mention} が {channel.name} に入ったよっ",
-                    color=color
-                )
 
-                embed.set_thumbnail(url=member.display_avatar.url)
-
-                embed.set_author(
-                    name=f"{member.display_name} さん",
-                    icon_url=member.display_avatar.url
-                )
-
-                embed.set_footer(text=footer_text)
-
-                await text_channel.send(
-                    content=f"<@&{role_id}>",
-                    embed=embed
-                )
-
-# ====== トークン ======
-import os
-bot.run(os.getenv("TOKEN"))
-
+client.run(os.environ['TOKEN'])
