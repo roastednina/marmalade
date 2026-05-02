@@ -74,4 +74,4 @@ async def on_voice_state_update(member, before, after):
                     await notify_channel.send(f"☀️ {member.mention} がVC参加！")
 
 
-client.run(os.environ['TOKEN'])
+client.run(os.environ['DISCORD_BOT_TOKEN'])
