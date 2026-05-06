@@ -1,2 +1,0 @@
-# marmalade
-Discord Bot
